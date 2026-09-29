@@ -37,6 +37,23 @@ jobs:
       - name: Build
         run: ./gradlew build
 
+      # PostgreSQL tests skip themselves without Docker. CI has Docker, so a skip here
+      # means they did not really run.
+      - name: Check PostgreSQL tests ran
+        run: |
+          reports=$(ls build/test-results/test/TEST-*PostgresTest.xml 2>/dev/null || true)
+          if [ -z "$reports" ]; then
+            echo "::error::No PostgreSQL test reports found"
+            exit 1
+          fi
+          skipped=$(grep -L 'skipped="0"' $reports || true)
+          if [ -n "$skipped" ]; then
+            echo "::error::PostgreSQL tests were skipped: $skipped"
+            exit 1
+          fi
+          echo "PostgreSQL tests ran:"
+          grep -ho 'testsuite name="[^"]*" tests="[0-9]*"' $reports
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v7
@@ -44,3 +61,68 @@ jobs:
           name: test-reports
           path: build/reports/tests/test
           retention-days: 7
+
+  docker:
+    name: Docker image on PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          # Throwaway database that only exists during this job.
+          POSTGRES_DB: books
+          POSTGRES_USER: books
+          POSTGRES_PASSWORD: books-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U books"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build -t book-api:ci .
+
+      - name: Start app with prod profile
+        run: |
+          docker run -d --name book-api --network host \
+            -e DB_URL=jdbc:postgresql://localhost:5432/books \
+            -e DB_USERNAME=books \
+            -e DB_PASSWORD=books-ci-only \
+            -e JWT_SECRET="$(openssl rand -base64 48)" \
+            book-api:ci
+
+      - name: Wait until healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              echo "App is UP"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::App did not become healthy"
+          exit 1
+
+      - name: Smoke test register, login and books
+        run: |
+          base=http://localhost:8080
+          credentials='{"email": "ci@example.com", "password": "correct horse battery"}'
+          curl -fs -X POST "$base/api/auth/register" -H 'Content-Type: application/json' -d "$credentials"
+          token=$(curl -fs -X POST "$base/api/auth/login" -H 'Content-Type: application/json' -d "$credentials" \
+            | python3 -c 'import sys, json; print(json.load(sys.stdin)["accessToken"])')
+          curl -fs -X POST "$base/api/books" -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' -d '{"title": "Dune", "author": "Frank Herbert"}'
+          curl -fs "$base/api/books" -H "Authorization: Bearer $token" | grep -q '"title":"Dune"'
+          echo "Smoke test passed"
+
+      - name: Show app logs
+        if: always()
+        run: docker logs book-api
