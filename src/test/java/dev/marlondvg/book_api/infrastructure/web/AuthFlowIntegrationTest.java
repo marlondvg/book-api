@@ -135,6 +135,32 @@ class AuthFlowIntegrationTest {
 	}
 
 	@Test
+	void shouldBlockEmailAfterFiveFailedLoginsEvenWithCorrectPassword() throws Exception {
+		register("frank@example.com");
+		for (int attempt = 1; attempt <= 5; attempt++) {
+			mockMvc.perform(json(post("/api/auth/login"), """
+							{"email": "frank@example.com", "password": "not the password"}
+							""")
+							.with(request -> {
+								request.setRemoteAddr("192.0.2.10");
+								return request;
+							}))
+					.andExpect(status().isUnauthorized());
+		}
+
+		mockMvc.perform(json(post("/api/auth/login"), """
+						{"email": "frank@example.com", "password": "%s"}
+						""".formatted(PASSWORD))
+						.with(request -> {
+							request.setRemoteAddr("192.0.2.11");
+							return request;
+						}))
+				.andExpect(status().isTooManyRequests())
+				.andExpect(header().exists(HttpHeaders.RETRY_AFTER))
+				.andExpect(jsonPath("$.detail").value("Too many failed login attempts. Try again later."));
+	}
+
+	@Test
 	void shouldRejectRequestWithoutToken() throws Exception {
 		mockMvc.perform(get("/api/books"))
 				.andExpect(status().isUnauthorized())
