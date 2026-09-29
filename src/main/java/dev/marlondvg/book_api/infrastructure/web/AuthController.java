@@ -9,6 +9,7 @@ import dev.marlondvg.book_api.infrastructure.web.dto.RegisterRequest;
 import dev.marlondvg.book_api.infrastructure.web.dto.TokenResponse;
 import dev.marlondvg.book_api.infrastructure.web.dto.UserResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,7 +38,9 @@ class AuthController {
 	}
 
 	@PostMapping("/login")
-	TokenResponse login(@Valid @RequestBody LoginRequest request) {
-		return TokenResponse.from(login.login(new LoginCommand(request.email(), request.password())));
+	TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+		// In production the remote address comes from X-Forwarded-For (forward-headers-strategy).
+		return TokenResponse.from(login.login(
+				new LoginCommand(request.email(), request.password(), httpRequest.getRemoteAddr())));
 	}
 }

@@ -17,7 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, LoginLimitProperties.class})
 public class SecurityConfig {
 
 	private static final String[] PUBLIC_PATHS = {

@@ -3,6 +3,7 @@ package dev.marlondvg.book_api.application.service;
 import dev.marlondvg.book_api.application.port.in.LoginCommand;
 import dev.marlondvg.book_api.application.port.in.RegisterUserCommand;
 import dev.marlondvg.book_api.application.port.out.AccessToken;
+import dev.marlondvg.book_api.application.port.out.LoginAttemptLimiter;
 import dev.marlondvg.book_api.application.port.out.PasswordHasher;
 import dev.marlondvg.book_api.application.port.out.TokenIssuer;
 import dev.marlondvg.book_api.application.port.out.UserRepository;
@@ -11,6 +12,7 @@ import dev.marlondvg.book_api.domain.exception.EmailAlreadyUsedException;
 import dev.marlondvg.book_api.domain.exception.InvalidCredentialsException;
 import dev.marlondvg.book_api.domain.exception.InvalidPasswordException;
 import dev.marlondvg.book_api.domain.exception.InvalidUserException;
+import dev.marlondvg.book_api.domain.exception.TooManyLoginAttemptsException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,7 @@ class AuthServiceTest {
 
 	private static final Instant NOW = Instant.parse("2026-04-01T12:00:00Z");
 	private static final String PASSWORD = "correct horse battery";
+	private static final String IP = "203.0.113.7";
 
 	@Mock
 	private UserRepository userRepository;
@@ -44,12 +47,15 @@ class AuthServiceTest {
 	private PasswordHasher passwordHasher;
 	@Mock
 	private TokenIssuer tokenIssuer;
+	@Mock
+	private LoginAttemptLimiter loginAttemptLimiter;
 
 	private AuthService authService;
 
 	@BeforeEach
 	void setUp() {
-		authService = new AuthService(userRepository, passwordHasher, tokenIssuer, Clock.fixed(NOW, ZoneOffset.UTC));
+		authService = new AuthService(userRepository, passwordHasher, tokenIssuer, loginAttemptLimiter,
+				Clock.fixed(NOW, ZoneOffset.UTC));
 	}
 
 	@Nested
@@ -99,7 +105,7 @@ class AuthServiceTest {
 		@Test
 		void shouldNotShowPasswordInCommandToString() {
 			assertThat(new RegisterUserCommand("ann@example.com", PASSWORD).toString()).doesNotContain(PASSWORD);
-			assertThat(new LoginCommand("ann@example.com", PASSWORD).toString()).doesNotContain(PASSWORD);
+			assertThat(new LoginCommand("ann@example.com", PASSWORD, IP).toString()).doesNotContain(PASSWORD);
 		}
 	}
 
@@ -116,7 +122,7 @@ class AuthServiceTest {
 			when(passwordHasher.matches(PASSWORD, "stored-hash")).thenReturn(true);
 			when(tokenIssuer.issueFor(user)).thenReturn(token);
 
-			assertThat(authService.login(new LoginCommand(" ANN@example.com", PASSWORD))).isEqualTo(token);
+			assertThat(authService.login(new LoginCommand(" ANN@example.com", PASSWORD, IP))).isEqualTo(token);
 		}
 
 		@Test
@@ -124,7 +130,7 @@ class AuthServiceTest {
 			when(userRepository.findByEmail("ann@example.com")).thenReturn(Optional.of(user));
 			when(passwordHasher.matches("wrong password", "stored-hash")).thenReturn(false);
 
-			assertThatThrownBy(() -> authService.login(new LoginCommand("ann@example.com", "wrong password")))
+			assertThatThrownBy(() -> authService.login(new LoginCommand("ann@example.com", "wrong password", IP)))
 					.isInstanceOf(InvalidCredentialsException.class)
 					.hasMessage("Invalid email or password");
 
@@ -135,7 +141,7 @@ class AuthServiceTest {
 		void shouldRejectUnknownEmailWithSameErrorAndStillHash() {
 			when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
 
-			assertThatThrownBy(() -> authService.login(new LoginCommand("nobody@example.com", PASSWORD)))
+			assertThatThrownBy(() -> authService.login(new LoginCommand("nobody@example.com", PASSWORD, IP)))
 					.isInstanceOf(InvalidCredentialsException.class)
 					.hasMessage("Invalid email or password");
 
@@ -145,7 +151,7 @@ class AuthServiceTest {
 
 		@Test
 		void shouldRejectMalformedEmailLikeUnknownEmail() {
-			assertThatThrownBy(() -> authService.login(new LoginCommand("not-an-email", PASSWORD)))
+			assertThatThrownBy(() -> authService.login(new LoginCommand("not-an-email", PASSWORD, IP)))
 					.isInstanceOf(InvalidCredentialsException.class);
 
 			verify(passwordHasher).hash(PASSWORD);
@@ -154,10 +160,55 @@ class AuthServiceTest {
 
 		@Test
 		void shouldRejectPasswordLongerThan72BytesWithoutHashing() {
-			assertThatThrownBy(() -> authService.login(new LoginCommand("ann@example.com", "a".repeat(73))))
+			assertThatThrownBy(() -> authService.login(new LoginCommand("ann@example.com", "a".repeat(73), IP)))
 					.isInstanceOf(InvalidCredentialsException.class);
 
 			verifyNoInteractions(userRepository, passwordHasher, tokenIssuer);
+		}
+
+		@Test
+		void shouldRefuseBlockedLoginBeforeHashing() {
+			when(loginAttemptLimiter.retryAfter("ann@example.com", IP)).thenReturn(Optional.of(Duration.ofMinutes(3)));
+
+			assertThatThrownBy(() -> authService.login(new LoginCommand("Ann@example.com", PASSWORD, IP)))
+					.isInstanceOfSatisfying(TooManyLoginAttemptsException.class,
+							e -> assertThat(e.getRetryAfter()).isEqualTo(Duration.ofMinutes(3)));
+
+			verifyNoInteractions(userRepository, passwordHasher, tokenIssuer);
+			verify(loginAttemptLimiter, never()).recordFailure(any(), any());
+		}
+
+		@Test
+		void shouldRecordSuccessAndNoFailureForValidCredentials() {
+			when(userRepository.findByEmail("ann@example.com")).thenReturn(Optional.of(user));
+			when(passwordHasher.matches(PASSWORD, "stored-hash")).thenReturn(true);
+			when(tokenIssuer.issueFor(user)).thenReturn(new AccessToken("jwt", Duration.ofHours(1)));
+
+			authService.login(new LoginCommand("ann@example.com", PASSWORD, IP));
+
+			verify(loginAttemptLimiter).recordSuccess("ann@example.com");
+			verify(loginAttemptLimiter, never()).recordFailure(any(), any());
+		}
+
+		@Test
+		void shouldRecordFailureForWrongPassword() {
+			when(userRepository.findByEmail("ann@example.com")).thenReturn(Optional.of(user));
+			when(passwordHasher.matches("wrong password", "stored-hash")).thenReturn(false);
+
+			assertThatThrownBy(() -> authService.login(new LoginCommand("ann@example.com", "wrong password", IP)))
+					.isInstanceOf(InvalidCredentialsException.class);
+
+			verify(loginAttemptLimiter).recordFailure("ann@example.com", IP);
+			verify(loginAttemptLimiter, never()).recordSuccess(any());
+		}
+
+		@Test
+		void shouldCountMalformedEmailOnlyAgainstIp() {
+			assertThatThrownBy(() -> authService.login(new LoginCommand("not-an-email", PASSWORD, IP)))
+					.isInstanceOf(InvalidCredentialsException.class);
+
+			verify(loginAttemptLimiter).retryAfter(null, IP);
+			verify(loginAttemptLimiter).recordFailure(null, IP);
 		}
 	}
 }

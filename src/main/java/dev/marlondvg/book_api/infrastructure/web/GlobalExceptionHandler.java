@@ -10,6 +10,7 @@ import dev.marlondvg.book_api.domain.exception.InvalidRatingException;
 import dev.marlondvg.book_api.domain.exception.InvalidStatusTransitionException;
 import dev.marlondvg.book_api.domain.exception.InvalidUserException;
 import dev.marlondvg.book_api.domain.exception.RatingNotAllowedException;
+import dev.marlondvg.book_api.domain.exception.TooManyLoginAttemptsException;
 import dev.marlondvg.book_api.domain.exception.UnknownUserException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -60,6 +61,16 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 	@ExceptionHandler({InvalidCredentialsException.class, UnknownUserException.class})
 	ProblemDetail handleInvalidCredentials(DomainException ex, HttpServletRequest request) {
 		return problem(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
+	}
+
+	@ExceptionHandler(TooManyLoginAttemptsException.class)
+	ResponseEntity<ProblemDetail> handleTooManyLoginAttempts(TooManyLoginAttemptsException ex,
+			HttpServletRequest request) {
+		// Round up so clients never retry a moment too early.
+		long retryAfterSeconds = Math.max(1, (ex.getRetryAfter().toMillis() + 999) / 1000);
+		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+				.header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds))
+				.body(problem(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request));
 	}
 
 	@ExceptionHandler(AuthenticationException.class)

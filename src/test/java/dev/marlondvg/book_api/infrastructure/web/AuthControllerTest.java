@@ -9,6 +9,7 @@ import dev.marlondvg.book_api.domain.User;
 import dev.marlondvg.book_api.domain.exception.EmailAlreadyUsedException;
 import dev.marlondvg.book_api.domain.exception.InvalidCredentialsException;
 import dev.marlondvg.book_api.domain.exception.InvalidPasswordException;
+import dev.marlondvg.book_api.domain.exception.TooManyLoginAttemptsException;
 import dev.marlondvg.book_api.infrastructure.config.CorsConfig;
 import dev.marlondvg.book_api.infrastructure.security.SecurityConfig;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -111,15 +113,21 @@ class AuthControllerTest {
 	void shouldLoginWithoutAuthenticationAndReturnBearerToken() throws Exception {
 		when(login.login(any())).thenReturn(new AccessToken("signed.jwt.token", Duration.ofHours(1)));
 
-		postJson("/api/auth/login", """
-				{"email": "ann@example.com", "password": "%s"}
-				""".formatted(PASSWORD))
+		mockMvc.perform(post("/api/auth/login")
+						.with(request -> {
+							request.setRemoteAddr("10.1.2.3");
+							return request;
+						})
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"email": "ann@example.com", "password": "%s"}
+								""".formatted(PASSWORD)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.accessToken").value("signed.jwt.token"))
 				.andExpect(jsonPath("$.tokenType").value("Bearer"))
 				.andExpect(jsonPath("$.expiresIn").value(3600));
 
-		verify(login).login(new LoginCommand("ann@example.com", PASSWORD));
+		verify(login).login(new LoginCommand("ann@example.com", PASSWORD, "10.1.2.3"));
 	}
 
 	@Test
@@ -132,6 +140,20 @@ class AuthControllerTest {
 				.andExpect(status().isUnauthorized())
 				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
 				.andExpect(jsonPath("$.detail").value("Invalid email or password"));
+	}
+
+	@Test
+	void shouldReturnTooManyRequestsWithRetryAfterWhenLoginIsBlocked() throws Exception {
+		when(login.login(any())).thenThrow(new TooManyLoginAttemptsException(Duration.ofMillis(90_500)));
+
+		postJson("/api/auth/login", """
+				{"email": "ann@example.com", "password": "%s"}
+				""".formatted(PASSWORD))
+				.andExpect(status().isTooManyRequests())
+				.andExpect(header().string("Retry-After", "91"))
+				.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(429))
+				.andExpect(jsonPath("$.detail").value("Too many failed login attempts. Try again later."));
 	}
 
 	@Test
