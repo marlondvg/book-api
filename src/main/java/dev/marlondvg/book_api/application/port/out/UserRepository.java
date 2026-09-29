@@ -3,6 +3,7 @@ package dev.marlondvg.book_api.application.port.out;
 import dev.marlondvg.book_api.domain.User;
 
 import java.util.Optional;
+import java.util.UUID;
 
 public interface UserRepository {
 
@@ -19,4 +20,6 @@ public interface UserRepository {
 	Optional<User> findByEmail(String email);
 
 	boolean existsByEmail(String email);
+
+	Optional<User> findById(UUID id);
 }

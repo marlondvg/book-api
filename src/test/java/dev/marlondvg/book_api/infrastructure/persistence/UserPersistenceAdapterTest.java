@@ -10,6 +10,7 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,6 +49,18 @@ class UserPersistenceAdapterTest {
 		assertThat(adapter.existsByEmail("ann@example.com")).isTrue();
 		assertThat(adapter.existsByEmail("bob@example.com")).isFalse();
 		assertThat(adapter.findByEmail("bob@example.com")).isEmpty();
+	}
+
+	@Test
+	void shouldFindUserById() {
+		User user = User.register("ann@example.com", "hashed", CREATED_AT);
+		adapter.save(user);
+		entityManager.clear();
+
+		User found = adapter.findById(user.getId()).orElseThrow();
+
+		assertThat(found.getEmail()).isEqualTo("ann@example.com");
+		assertThat(adapter.findById(UUID.randomUUID())).isEmpty();
 	}
 
 	@Test

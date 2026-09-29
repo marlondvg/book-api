@@ -12,8 +12,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -71,6 +74,25 @@ class AuthFlowIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(1)))
 				.andExpect(jsonPath("$[0].title").value("Dune"));
+	}
+
+	@Test
+	void shouldReturnCurrentUserForIssuedToken() throws Exception {
+		register("Erin@Example.com");
+		String token = login("erin@example.com");
+
+		mockMvc.perform(get("/api/users/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.email").value("erin@example.com"))
+				.andExpect(jsonPath("$.id").isNotEmpty())
+				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+	}
+
+	@Test
+	void shouldRejectTokenOfUserThatDoesNotExist() throws Exception {
+		mockMvc.perform(get("/api/users/me").with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()))))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.detail").value("User no longer exists"));
 	}
 
 	@Test
