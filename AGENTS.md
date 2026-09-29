@@ -133,6 +133,10 @@ dev.marlondvg.book_api
 ## Deployment
 
 - Backend on Render using the project `Dockerfile`; frontend on Vercel.
+  Live API: `https://book-api-oasv.onrender.com`.
+- The production database must be dedicated to this app. Flyway fails on a schema that
+  already holds other tables and no history table; never "fix" that with `baselineOnMigrate`
+  in committed config.
 - Production profile: `spring.profiles.active=prod` (set in the `Dockerfile`), PostgreSQL via environment variables,
   `flyway-database-postgresql` module on the runtime classpath.
 - Environment variables in production:
