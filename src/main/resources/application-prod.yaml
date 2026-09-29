@@ -1,0 +1,19 @@
+# Production profile (SPRING_PROFILES_ACTIVE=prod, set in the Dockerfile).
+# Every value comes from environment variables; startup fails if one is missing.
+spring:
+  datasource:
+    # JDBC form, e.g. jdbc:postgresql://host:5432/books
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+  h2:
+    console:
+      enabled: false
+
+server:
+  port: ${PORT:8080}
+  # Render terminates TLS in front of the app; use its X-Forwarded-* headers
+  # so Location headers point to the public https URL.
+  forward-headers-strategy: framework

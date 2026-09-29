@@ -92,13 +92,16 @@ dev.marlondvg.book_api
 - Schema changes only through new Flyway migrations in `src/main/resources/db/migration`
   (`V<n>__description.sql`). Never edit a migration that has already been committed to `main`.
 - Must run on both H2 (PostgreSQL mode) and PostgreSQL. Avoid vendor-specific SQL.
+- A new migration is not done until the PostgreSQL tests (`*PostgresTest`) pass in CI.
 
 ## Testing
 
 - **Domain**: plain unit tests, no Spring context. Cover every status transition and the rating rule.
 - **Application services**: unit tests with mocked ports (Mockito).
 - **Web**: `@WebMvcTest` slices; use `@MockitoBean` (not `@MockBean`) for use cases.
-- **Persistence**: `@DataJpaTest` against H2 with Flyway enabled.
+- **Persistence**: `@DataJpaTest` against H2 with Flyway enabled. Each adapter test also has a
+  `*PostgresTest` subclass that reruns it on real PostgreSQL via Testcontainers
+  (`PostgresTestcontainersConfig`). They are skipped without Docker locally; CI fails if they are skipped.
 - **Architecture**: ArchUnit tests in `src/test/java/.../architecture` for the dependency rules above.
 - **Security**: tests must cover "user A cannot read, update, or delete user B's book" (expects 404).
 - Test names describe behavior, for example `shouldRejectRatingWhenBookIsToRead`.
@@ -130,8 +133,14 @@ dev.marlondvg.book_api
 ## Deployment
 
 - Backend on Render using the project `Dockerfile`; frontend on Vercel.
-- Production profile: `spring.profiles.active=prod`, PostgreSQL via environment variables,
+- Production profile: `spring.profiles.active=prod` (set in the `Dockerfile`), PostgreSQL via environment variables,
   `flyway-database-postgresql` module on the runtime classpath.
+- Environment variables in production:
+  - `DB_URL` (JDBC form, `jdbc:postgresql://host:5432/db`), `DB_USERNAME`, `DB_PASSWORD`
+  - `JWT_SECRET` (at least 32 bytes, random, never reused from another environment)
+  - `CORS_ALLOWED_ORIGINS` (the Vercel frontend URL)
+  - `PORT` (set by Render)
+- CI builds the Docker image and starts it with the prod profile against PostgreSQL on every PR.
 
 ## Do not
 
