@@ -6,6 +6,12 @@ have finished or gave up on, with dates and a rating.
 
 The frontend lives in a separate repository (`book-app-frontend`, React + Vite).
 
+**Live API:** https://book-api-oasv.onrender.com
+([Swagger UI](https://book-api-oasv.onrender.com/swagger-ui.html),
+[health](https://book-api-oasv.onrender.com/actuator/health)).
+It runs on Render's free plan, which sleeps after a period without traffic, so
+the first request after a pause can take about a minute.
+
 ## Stack
 
 - Java 21, Spring Boot 4.1, Gradle
@@ -27,6 +33,10 @@ JWT_SECRET=$(openssl rand -base64 48) ./gradlew bootRun
 The app starts on http://localhost:8080. It refuses to start without
 `JWT_SECRET`. A new random value per run is fine locally, but tokens from a
 previous run stop working, and the in-memory data is gone after a restart.
+
+From IntelliJ, open **Run → Edit Configurations…**, select `BookApiApplication`
+and add `JWT_SECRET=<a value of 32+ characters>` under **Environment variables**.
+Keep that value out of any run configuration you commit.
 
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Health check: http://localhost:8080/actuator/health
@@ -173,16 +183,49 @@ builds the Docker image and starts it against PostgreSQL.
 The backend runs on [Render](https://render.com) from the `Dockerfile`, with a
 Render PostgreSQL database. The frontend runs on Vercel.
 
-1. Create a PostgreSQL database on Render.
+1. Create a PostgreSQL database on Render. It must be **empty or used only by
+   this app**: Flyway refuses to start on a schema that already holds other
+   tables. If an existing instance is shared, create a separate database in it
+   (`CREATE DATABASE book_api;`) and point `DB_URL` at that.
 2. Create a Web Service from this repository; Render builds the `Dockerfile`.
-3. Set the environment variables from [Configuration](#configuration). Render
-   shows the database URL as `postgresql://user:pass@host/db`; write it as
-   `jdbc:postgresql://host:5432/db` in `DB_URL` and put the user and password
-   in `DB_USERNAME` and `DB_PASSWORD`. Use a new random `JWT_SECRET`
-   (`openssl rand -base64 48`).
+3. On the **Web Service** (not the database), set the environment variables
+   from [Configuration](#configuration):
+   - Copy the database's **Internal Database URL**
+     (`postgresql://USER:PASSWORD@HOST/DB`) and split it:
+     `DB_URL=jdbc:postgresql://HOST:5432/DB`, `DB_USERNAME=USER`,
+     `DB_PASSWORD=PASSWORD`. Use the internal URL, not the external one: both
+     services are on Render's private network.
+   - `JWT_SECRET`: a new random value (`openssl rand -base64 48`), never one
+     used elsewhere.
+   - `CORS_ALLOWED_ORIGINS`: the Vercel frontend URL, without a trailing slash.
+   - Paste values without quotes or trailing spaces.
 4. Set the health check path to `/actuator/health`.
 
-Flyway applies the database migrations on startup.
+Flyway applies the database migrations on startup. A successful first deploy
+logs `Migrating schema "public" to version "1 - create users and books"`, and
+`/actuator/health` then reports `UP`.
+
+Never paste a database URL that contains the password into chats, issues or
+logs. If that happens, rotate the database credentials in Render and update
+`DB_PASSWORD`.
+
+### Troubleshooting
+
+| Error in the Render log | Cause | Fix |
+|---|---|---|
+| `'url' must start with "jdbc"` | `DB_URL` was pasted in Render's `postgresql://…` form | Use `jdbc:postgresql://HOST:5432/DB`, with user and password in their own variables |
+| `Found non-empty schema(s) "public" but no schema history table` | The database holds another app's tables | Use an empty or dedicated database (see step 1) |
+| `app.jwt.secret (JWT_SECRET) must be set and at least 32 bytes long` | `JWT_SECRET` missing, too short, or set on the database instead of the Web Service | Set it on the Web Service |
+| `password authentication failed` | `DB_USERNAME` or `DB_PASSWORD` does not match the database | Copy both again from the same database's internal URL |
+
+`No open ports detected, continuing to scan...` while the app starts is normal:
+startup takes a while on a small instance, and Render keeps checking until the
+port opens.
+
+To look inside the production database from your machine, install the client
+(`brew install libpq && brew link --force libpq`) and run
+`psql "<External Database URL>"`, copied from the database's **Connect →
+External** tab.
 
 ## Project structure
 
