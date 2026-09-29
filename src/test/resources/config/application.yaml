@@ -1,0 +1,5 @@
+# Test-only settings, loaded on top of src/main/resources/application.yaml.
+# This key only signs tokens inside the test suite; it is not a real secret.
+app:
+  jwt:
+    secret: test-only-signing-key-not-used-outside-tests

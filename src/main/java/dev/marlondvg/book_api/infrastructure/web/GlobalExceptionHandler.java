@@ -2,9 +2,13 @@ package dev.marlondvg.book_api.infrastructure.web;
 
 import dev.marlondvg.book_api.domain.exception.BookNotFoundException;
 import dev.marlondvg.book_api.domain.exception.DomainException;
+import dev.marlondvg.book_api.domain.exception.EmailAlreadyUsedException;
 import dev.marlondvg.book_api.domain.exception.InvalidBookException;
+import dev.marlondvg.book_api.domain.exception.InvalidCredentialsException;
+import dev.marlondvg.book_api.domain.exception.InvalidPasswordException;
 import dev.marlondvg.book_api.domain.exception.InvalidRatingException;
 import dev.marlondvg.book_api.domain.exception.InvalidStatusTransitionException;
+import dev.marlondvg.book_api.domain.exception.InvalidUserException;
 import dev.marlondvg.book_api.domain.exception.RatingNotAllowedException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -39,14 +43,21 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem(HttpStatus.NOT_FOUND, ex.getMessage(), request);
 	}
 
-	@ExceptionHandler({InvalidBookException.class, InvalidRatingException.class})
+	@ExceptionHandler({InvalidBookException.class, InvalidRatingException.class, InvalidUserException.class,
+			InvalidPasswordException.class})
 	ProblemDetail handleInvalidInput(DomainException ex, HttpServletRequest request) {
 		return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
 	}
 
-	@ExceptionHandler({InvalidStatusTransitionException.class, RatingNotAllowedException.class})
+	@ExceptionHandler({InvalidStatusTransitionException.class, RatingNotAllowedException.class,
+			EmailAlreadyUsedException.class})
 	ProblemDetail handleConflict(DomainException ex, HttpServletRequest request) {
 		return problem(HttpStatus.CONFLICT, ex.getMessage(), request);
+	}
+
+	@ExceptionHandler(InvalidCredentialsException.class)
+	ProblemDetail handleInvalidCredentials(InvalidCredentialsException ex, HttpServletRequest request) {
+		return problem(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
 	}
 
 	@ExceptionHandler(AuthenticationException.class)

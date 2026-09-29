@@ -17,7 +17,6 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -72,7 +71,7 @@ class BookOwnershipIntegrationTest {
 	}
 
 	private static MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder request, UUID user, String body) {
-		return request.with(as(user)).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
+		return request.with(as(user)).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	@Test
@@ -94,7 +93,7 @@ class BookOwnershipIntegrationTest {
 				.andExpect(status().isNotFound());
 		mockMvc.perform(json(put("/api/books/{id}/rating", bookOfB), userA, "{\"value\": 1}"))
 				.andExpect(status().isNotFound());
-		mockMvc.perform(delete("/api/books/{id}/rating", bookOfB).with(as(userA)).with(csrf()))
+		mockMvc.perform(delete("/api/books/{id}/rating", bookOfB).with(as(userA)))
 				.andExpect(status().isNotFound());
 
 		mockMvc.perform(get("/api/books/{id}", bookOfB).with(as(userB)))
@@ -106,7 +105,7 @@ class BookOwnershipIntegrationTest {
 
 	@Test
 	void shouldNotLetUserDeleteAnotherUsersBook() throws Exception {
-		mockMvc.perform(delete("/api/books/{id}", bookOfB).with(as(userA)).with(csrf()))
+		mockMvc.perform(delete("/api/books/{id}", bookOfB).with(as(userA)))
 				.andExpect(status().isNotFound());
 
 		mockMvc.perform(get("/api/books/{id}", bookOfB).with(as(userB)))

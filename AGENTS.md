@@ -23,10 +23,15 @@ Frontend lives in a separate repo (`book-app-frontend`, React + Vite).
 ## Commands
 
 ```bash
-./gradlew bootRun        # run the app (http://localhost:8080)
+JWT_SECRET=$(openssl rand -base64 48) ./gradlew bootRun   # run the app (http://localhost:8080)
 ./gradlew test           # run all tests, including architecture tests
 ./gradlew build          # compile + test + package
 ```
+
+The app refuses to start without `JWT_SECRET` (at least 32 bytes). A random value
+per run is fine locally; tokens issued before a restart then stop working.
+Tests use a dummy key from `src/test/resources/config/application.yaml`.
+Optional: `CORS_ALLOWED_ORIGINS` (comma-separated, default `http://localhost:5173`).
 
 Swagger UI: `http://localhost:8080/swagger-ui.html`
 Health check: `/actuator/health`

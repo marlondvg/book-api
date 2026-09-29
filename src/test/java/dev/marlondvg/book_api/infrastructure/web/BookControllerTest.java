@@ -17,10 +17,13 @@ import dev.marlondvg.book_api.domain.ReadingStatus;
 import dev.marlondvg.book_api.domain.exception.BookNotFoundException;
 import dev.marlondvg.book_api.domain.exception.InvalidStatusTransitionException;
 import dev.marlondvg.book_api.domain.exception.RatingNotAllowedException;
+import dev.marlondvg.book_api.infrastructure.config.CorsConfig;
+import dev.marlondvg.book_api.infrastructure.security.SecurityConfig;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -39,11 +42,11 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -55,6 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(BookController.class)
+@Import({SecurityConfig.class, CorsConfig.class})
 class BookControllerTest {
 
 	private static final UUID OWNER_ID = UUID.randomUUID();
@@ -87,7 +91,7 @@ class BookControllerTest {
 	}
 
 	private static MockHttpServletRequestBuilder json(MockHttpServletRequestBuilder request, String body) {
-		return request.with(owner()).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body);
+		return request.with(owner()).contentType(MediaType.APPLICATION_JSON).content(body);
 	}
 
 	private static Book book(ReadingStatus status, Rating rating) {
@@ -302,7 +306,7 @@ class BookControllerTest {
 		void shouldClearRating() throws Exception {
 			when(rateBook.clearRating(OWNER_ID, BOOK_ID)).thenReturn(book(READ, null));
 
-			mockMvc.perform(delete("/api/books/{id}/rating", BOOK_ID).with(owner()).with(csrf()))
+			mockMvc.perform(delete("/api/books/{id}/rating", BOOK_ID).with(owner()))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.rating").isEmpty());
 		}
@@ -313,7 +317,7 @@ class BookControllerTest {
 
 		@Test
 		void shouldDeleteBook() throws Exception {
-			mockMvc.perform(delete("/api/books/{id}", BOOK_ID).with(owner()).with(csrf()))
+			mockMvc.perform(delete("/api/books/{id}", BOOK_ID).with(owner()))
 					.andExpect(status().isNoContent());
 
 			verify(deleteBook).deleteBook(OWNER_ID, BOOK_ID);
@@ -326,7 +330,12 @@ class BookControllerTest {
 		@Test
 		void shouldRejectRequestWithoutAuthentication() throws Exception {
 			mockMvc.perform(get("/api/books"))
-					.andExpect(status().isUnauthorized());
+					.andExpect(status().isUnauthorized())
+					.andExpect(header().string("WWW-Authenticate", startsWith("Bearer")))
+					.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+					.andExpect(jsonPath("$.status").value(401))
+					.andExpect(jsonPath("$.detail").value("Authentication is required"))
+					.andExpect(jsonPath("$.instance").value("/api/books"));
 
 			verifyNoInteractions(listBooks);
 		}
