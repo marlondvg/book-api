@@ -7,6 +7,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Component
 class UserPersistenceAdapter implements UserRepository {
@@ -38,6 +39,11 @@ class UserPersistenceAdapter implements UserRepository {
 	@Override
 	public boolean existsByEmail(String email) {
 		return repository.existsByEmail(email);
+	}
+
+	@Override
+	public Optional<User> findById(UUID id) {
+		return repository.findById(id).map(UserPersistenceAdapter::toDomain);
 	}
 
 	private static User toDomain(UserJpaEntity entity) {

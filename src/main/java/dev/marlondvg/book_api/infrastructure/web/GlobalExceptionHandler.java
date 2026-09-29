@@ -10,6 +10,7 @@ import dev.marlondvg.book_api.domain.exception.InvalidRatingException;
 import dev.marlondvg.book_api.domain.exception.InvalidStatusTransitionException;
 import dev.marlondvg.book_api.domain.exception.InvalidUserException;
 import dev.marlondvg.book_api.domain.exception.RatingNotAllowedException;
+import dev.marlondvg.book_api.domain.exception.UnknownUserException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,8 +56,9 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return problem(HttpStatus.CONFLICT, ex.getMessage(), request);
 	}
 
-	@ExceptionHandler(InvalidCredentialsException.class)
-	ProblemDetail handleInvalidCredentials(InvalidCredentialsException ex, HttpServletRequest request) {
+	// A valid token whose user was removed is treated like an expired login.
+	@ExceptionHandler({InvalidCredentialsException.class, UnknownUserException.class})
+	ProblemDetail handleInvalidCredentials(DomainException ex, HttpServletRequest request) {
 		return problem(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
 	}
 
