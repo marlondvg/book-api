@@ -16,6 +16,7 @@ import dev.marlondvg.book_api.domain.Book;
 import dev.marlondvg.book_api.domain.Rating;
 import dev.marlondvg.book_api.domain.ReadingStatus;
 import dev.marlondvg.book_api.domain.exception.BookNotFoundException;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -24,7 +25,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-// Registered as a bean (@Service) together with the persistence adapter.
+@Service
 @Transactional
 public class BookService implements CreateBookUseCase, GetBookUseCase, ListBooksUseCase,
 		UpdateBookDetailsUseCase, ChangeBookStatusUseCase, RateBookUseCase, DeleteBookUseCase {
