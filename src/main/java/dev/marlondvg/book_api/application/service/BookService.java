@@ -68,7 +68,8 @@ public class BookService implements CreateBookUseCase, GetBookUseCase, ListBooks
 	@Override
 	public Book changeStatus(ChangeBookStatusCommand command) {
 		Book book = findOwnedBook(command.ownerId(), command.bookId());
-		book.changeStatus(command.status(), LocalDate.now(clock));
+		Clock userClock = command.timeZone() == null ? clock : clock.withZone(command.timeZone());
+		book.changeStatus(command.status(), LocalDate.now(userClock));
 		return bookRepository.save(book);
 	}
 

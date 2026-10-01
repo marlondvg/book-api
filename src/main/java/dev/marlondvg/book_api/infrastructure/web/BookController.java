@@ -91,7 +91,7 @@ class BookController {
 	BookResponse changeStatus(@CurrentUserId UUID ownerId, @PathVariable UUID id,
 			@Valid @RequestBody StatusRequest request) {
 		return BookResponse.from(changeBookStatus.changeStatus(
-				new ChangeBookStatusCommand(ownerId, id, request.status())));
+				new ChangeBookStatusCommand(ownerId, id, request.status(), request.timeZone())));
 	}
 
 	@PutMapping("/{id}/rating")

@@ -33,7 +33,9 @@ newest first.
 - `BookDetailsRequest`: `title` (required, max 255), `author` (required,
   max 255), `pages` (optional, > 0), `isbn` (optional, max 20),
   `coverUrl` (optional, max 500).
-- `StatusRequest`: `status` (required, one of the `ReadingStatus` names).
+- `StatusRequest`: `status` (required, one of the `ReadingStatus` names),
+  `timeZone` (optional IANA zone ID used for `startedAt` / `finishedAt`; see
+  `status-date-timezone.md`).
 - `RatingRequest`: `value` (required, 1 to 5).
 
 ### Response (`BookResponse`)

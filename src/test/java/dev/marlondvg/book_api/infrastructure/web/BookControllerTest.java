@@ -32,6 +32,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
@@ -250,7 +251,42 @@ class BookControllerTest {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.status").value("READING"));
 
-			verify(changeBookStatus).changeStatus(new ChangeBookStatusCommand(OWNER_ID, BOOK_ID, READING));
+			verify(changeBookStatus).changeStatus(new ChangeBookStatusCommand(OWNER_ID, BOOK_ID, READING, null));
+		}
+
+		@Test
+		void shouldPassUserTimeZoneToUseCase() throws Exception {
+			when(changeBookStatus.changeStatus(any())).thenReturn(book(READING, null));
+
+			mockMvc.perform(json(put("/api/books/{id}/status", BOOK_ID),
+							"{\"status\": \"READING\", \"timeZone\": \"America/Bogota\"}"))
+					.andExpect(status().isOk());
+
+			verify(changeBookStatus).changeStatus(
+					new ChangeBookStatusCommand(OWNER_ID, BOOK_ID, READING, ZoneId.of("America/Bogota")));
+		}
+
+		@Test
+		void shouldTreatEmptyTimeZoneAsMissing() throws Exception {
+			when(changeBookStatus.changeStatus(any())).thenReturn(book(READING, null));
+
+			mockMvc.perform(json(put("/api/books/{id}/status", BOOK_ID),
+							"{\"status\": \"READING\", \"timeZone\": \"\"}"))
+					.andExpect(status().isOk());
+
+			verify(changeBookStatus).changeStatus(new ChangeBookStatusCommand(OWNER_ID, BOOK_ID, READING, null));
+		}
+
+		@Test
+		void shouldRejectInvalidTimeZone() throws Exception {
+			for (String timeZone : List.of("\"Mars/Olympus\"", "\"+25:00\"", "42")) {
+				mockMvc.perform(json(put("/api/books/{id}/status", BOOK_ID),
+								"{\"status\": \"READING\", \"timeZone\": " + timeZone + "}"))
+						.andExpect(status().isBadRequest())
+						.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON));
+			}
+
+			verifyNoInteractions(changeBookStatus);
 		}
 
 		@Test
