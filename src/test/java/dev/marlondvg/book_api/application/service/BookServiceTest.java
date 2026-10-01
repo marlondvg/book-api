@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -47,6 +48,7 @@ class BookServiceTest {
 	private static final LocalDate STARTED = LocalDate.of(2026, 3, 1);
 	private static final UUID OWNER_ID = UUID.randomUUID();
 	private static final UUID OTHER_OWNER_ID = UUID.randomUUID();
+	private static final ZoneId BOGOTA = ZoneId.of("America/Bogota");
 
 	@Mock
 	private BookRepository bookRepository;
@@ -178,11 +180,55 @@ class BookServiceTest {
 			givenStored(stored);
 			givenSaveReturnsArgument();
 
-			Book book = bookService.changeStatus(new ChangeBookStatusCommand(OWNER_ID, stored.getId(), READING));
+			Book book = bookService.changeStatus(new ChangeBookStatusCommand(OWNER_ID, stored.getId(), READING, null));
 
 			assertThat(book.getStatus()).isEqualTo(READING);
 			assertThat(book.getStartedAt()).isEqualTo(TODAY);
 			verify(bookRepository).save(stored);
+		}
+
+		@Test
+		void shouldUseUserDateWhenUserIsBehindUtc() {
+			// 01:00 UTC on Oct 1 is still 20:00 on Sept 30 in Bogota.
+			BookService service = serviceAt("2026-10-01T01:00:00Z");
+			Book stored = storedBook(TO_READ);
+			givenStored(stored);
+			givenSaveReturnsArgument();
+
+			service.changeStatus(new ChangeBookStatusCommand(OWNER_ID, stored.getId(), READING, BOGOTA));
+			Book book = service.changeStatus(new ChangeBookStatusCommand(OWNER_ID, stored.getId(), READ, BOGOTA));
+
+			assertThat(book.getStartedAt()).isEqualTo(LocalDate.of(2026, 9, 30));
+			assertThat(book.getFinishedAt()).isEqualTo(LocalDate.of(2026, 9, 30));
+		}
+
+		@Test
+		void shouldUseUserDateWhenUserIsAheadOfUtc() {
+			BookService service = serviceAt("2026-09-30T23:00:00Z");
+			Book stored = storedBook(TO_READ);
+			givenStored(stored);
+			givenSaveReturnsArgument();
+
+			Book book = service.changeStatus(
+					new ChangeBookStatusCommand(OWNER_ID, stored.getId(), READING, ZoneId.of("Asia/Tokyo")));
+
+			assertThat(book.getStartedAt()).isEqualTo(LocalDate.of(2026, 10, 1));
+		}
+
+		@Test
+		void shouldUseClockZoneWhenTimeZoneIsMissing() {
+			BookService service = serviceAt("2026-10-01T01:00:00Z");
+			Book stored = storedBook(TO_READ);
+			givenStored(stored);
+			givenSaveReturnsArgument();
+
+			Book book = service.changeStatus(new ChangeBookStatusCommand(OWNER_ID, stored.getId(), READING, null));
+
+			assertThat(book.getStartedAt()).isEqualTo(LocalDate.of(2026, 10, 1));
+		}
+
+		private BookService serviceAt(String instant) {
+			return new BookService(bookRepository, Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
 		}
 
 		@Test
@@ -191,7 +237,7 @@ class BookServiceTest {
 			givenStored(stored);
 
 			assertThatThrownBy(() -> bookService.changeStatus(
-					new ChangeBookStatusCommand(OWNER_ID, stored.getId(), TO_READ)))
+					new ChangeBookStatusCommand(OWNER_ID, stored.getId(), TO_READ, null)))
 					.isInstanceOf(InvalidStatusTransitionException.class);
 
 			verify(bookRepository, never()).save(any());
@@ -203,7 +249,7 @@ class BookServiceTest {
 			when(bookRepository.findByIdAndOwnerId(bookId, OTHER_OWNER_ID)).thenReturn(Optional.empty());
 
 			assertThatThrownBy(() -> bookService.changeStatus(
-					new ChangeBookStatusCommand(OTHER_OWNER_ID, bookId, READING)))
+					new ChangeBookStatusCommand(OTHER_OWNER_ID, bookId, READING, null)))
 					.isInstanceOf(BookNotFoundException.class);
 		}
 	}
