@@ -183,10 +183,12 @@ builds the Docker image and starts it against PostgreSQL.
 The backend runs on [Render](https://render.com) from the `Dockerfile`, with a
 Render PostgreSQL database. The frontend runs on Vercel.
 
-1. Create a PostgreSQL database on Render. It must be **empty or used only by
-   this app**: Flyway refuses to start on a schema that already holds other
-   tables. If an existing instance is shared, create a separate database in it
-   (`CREATE DATABASE book_api;`) and point `DB_URL` at that.
+1. Create a PostgreSQL database on Render (it may be shared with other apps).
+   The app keeps all its tables in the `book_tracker` schema and does not
+   create it, so create it once before the first deploy:
+   `CREATE SCHEMA book_tracker;`. The database user needs `USAGE` and `CREATE`
+   on it. The schema must be **empty or used only by this app**: Flyway refuses
+   to start on a schema that already holds other tables.
 2. Create a Web Service from this repository; Render builds the `Dockerfile`.
 3. On the **Web Service** (not the database), set the environment variables
    from [Configuration](#configuration):
@@ -202,7 +204,7 @@ Render PostgreSQL database. The frontend runs on Vercel.
 4. Set the health check path to `/actuator/health`.
 
 Flyway applies the database migrations on startup. A successful first deploy
-logs `Migrating schema "public" to version "1 - create users and books"`, and
+logs `Migrating schema "book_tracker" to version "1 - create users and books"`, and
 `/actuator/health` then reports `UP`.
 
 Never paste a database URL that contains the password into chats, issues or
@@ -214,7 +216,8 @@ logs. If that happens, rotate the database credentials in Render and update
 | Error in the Render log | Cause | Fix |
 |---|---|---|
 | `'url' must start with "jdbc"` | `DB_URL` was pasted in Render's `postgresql://…` form | Use `jdbc:postgresql://HOST:5432/DB`, with user and password in their own variables |
-| `Found non-empty schema(s) "public" but no schema history table` | The database holds another app's tables | Use an empty or dedicated database (see step 1) |
+| `Found non-empty schema(s) "book_tracker" but no schema history table` | The schema holds another app's tables | Use an empty schema dedicated to this app (see step 1) |
+| `Schema "book_tracker" does not exist` or `permission denied for schema book_tracker` | The schema was not created, or the database user lacks rights on it | Create it and grant `USAGE` and `CREATE` (see step 1) |
 | `app.jwt.secret (JWT_SECRET) must be set and at least 32 bytes long` | `JWT_SECRET` missing, too short, or set on the database instead of the Web Service | Set it on the Web Service |
 | `password authentication failed` | `DB_USERNAME` or `DB_PASSWORD` does not match the database | Copy both again from the same database's internal URL |
 

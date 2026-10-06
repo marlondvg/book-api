@@ -11,6 +11,15 @@ spring:
   h2:
     console:
       enabled: false
+  # Tables live in a dedicated schema that must already exist (created by the DBA).
+  flyway:
+    schemas: book_tracker
+    default-schema: book_tracker
+    create-schemas: false
+  jpa:
+    properties:
+      hibernate:
+        default_schema: book_tracker
 
 server:
   port: ${PORT:8080}
