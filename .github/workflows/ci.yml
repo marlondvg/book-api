@@ -90,6 +90,12 @@ jobs:
       - name: Build image
         run: docker build -t book-api:ci .
 
+      # The prod profile expects the book_tracker schema to exist (create-schemas: false).
+      - name: Create schema
+        run: |
+          docker run --rm --network host -e PGPASSWORD=books-ci-only postgres:17-alpine \
+            psql -h localhost -U books -d books -c 'CREATE SCHEMA IF NOT EXISTS book_tracker'
+
       - name: Start app with prod profile
         run: |
           docker run -d --name book-api --network host \

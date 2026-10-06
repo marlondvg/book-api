@@ -134,9 +134,11 @@ dev.marlondvg.book_api
 
 - Backend on Render using the project `Dockerfile`; frontend on Vercel.
   Live API: `https://book-api-oasv.onrender.com`.
-- The production database must be dedicated to this app. Flyway fails on a schema that
-  already holds other tables and no history table; never "fix" that with `baselineOnMigrate`
-  in committed config.
+- In production, all tables live in the `book_tracker` schema, which must be dedicated to this app
+  (the database itself may be shared). The prod profile sets Flyway and Hibernate to that schema with
+  `create-schemas: false`, so the schema must exist before the first deploy and `DB_USERNAME` needs
+  `USAGE` and `CREATE` on it. Flyway fails on a schema that already holds other tables and no history
+  table; never "fix" that with `baselineOnMigrate` in committed config.
 - Production profile: `spring.profiles.active=prod` (set in the `Dockerfile`), PostgreSQL via environment variables,
   `flyway-database-postgresql` module on the runtime classpath.
 - Environment variables in production:
@@ -144,7 +146,8 @@ dev.marlondvg.book_api
   - `JWT_SECRET` (at least 32 bytes, random, never reused from another environment)
   - `CORS_ALLOWED_ORIGINS` (the Vercel frontend URL)
   - `PORT` (set by Render)
-- CI builds the Docker image and starts it with the prod profile against PostgreSQL on every PR.
+- CI builds the Docker image, creates the `book_tracker` schema, and starts the image with the prod
+  profile against PostgreSQL on every PR.
 
 ## Do not
 
